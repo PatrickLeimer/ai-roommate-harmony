@@ -427,4 +427,268 @@ export class MongoStorage implements IStorage {
   }
 }
 
-export const storage = new MongoStorage();
+// Mock storage that doesn't require MongoDB connection
+export class MockStorage implements IStorage {
+  // Session store
+  sessionStore: session.Store;
+  
+  // Mock data
+  private users: MongoUser[] = [];
+  private listings: MongoListing[] = [];
+  private appointments: MongoAppointment[] = [];
+  private subscriptionPlans: MongoSubscriptionPlan[] = [];
+  private conversations: MongoConversation[] = [];
+  private messages: MongoMessage[] = [];
+  private nextId = 1;
+  
+  constructor() {
+    // Initialize session store
+    this.sessionStore = new MemoryStore({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    });
+    
+    // Add default subscription plans
+    this.subscriptionPlans = [
+      {
+        _id: '1',
+        name: 'Free Trial',
+        price: 0,
+        interval: 'monthly',
+        features: JSON.stringify([
+          '3 property searches per week',
+          '1 scheduled viewing',
+          'Basic AI chat assistance'
+        ]),
+        stripePriceId: 'price_free'
+      },
+      {
+        _id: '2',
+        name: 'Monthly',
+        price: 1900,
+        interval: 'monthly',
+        features: JSON.stringify([
+          'Unlimited property searches',
+          '10 scheduled viewings',
+          'Full AI chat assistance',
+          'Lease contract analysis'
+        ]),
+        stripePriceId: 'price_monthly'
+      },
+      {
+        _id: '3',
+        name: 'Annual',
+        price: 16900,
+        interval: 'yearly',
+        features: JSON.stringify([
+          'Unlimited property searches',
+          'Unlimited scheduled viewings',
+          'Premium AI chat assistance',
+          'Advanced lease contract analysis',
+          'Priority results & early access'
+        ]),
+        stripePriceId: 'price_annual'
+      }
+    ];
+  }
+  
+  generateId(): string {
+    return (this.nextId++).toString();
+  }
+  
+  async initializeDatabase(): Promise<void> {
+    console.log('Using mock database');
+    return Promise.resolve();
+  }
+  
+  // User methods
+  async getUser(id: string): Promise<MongoUser | null> {
+    return this.users.find(user => user._id === id) || null;
+  }
+  
+  async getUserByUsername(username: string): Promise<MongoUser | null> {
+    return this.users.find(user => 
+      user.username.toLowerCase() === username.toLowerCase()
+    ) || null;
+  }
+  
+  async getUserByEmail(email: string): Promise<MongoUser | null> {
+    return this.users.find(user => 
+      user.email.toLowerCase() === email.toLowerCase()
+    ) || null;
+  }
+  
+  async createUser(userData: { username: string; email: string; password: string }): Promise<MongoUser> {
+    const newUser: MongoUser = {
+      _id: this.generateId(),
+      ...userData,
+      subscriptionTier: 'free',
+      subscriptionStatus: 'inactive',
+      createdAt: new Date(),
+    };
+    this.users.push(newUser);
+    return newUser;
+  }
+  
+  async updateUserSubscription(userId: string, tier: string, status: string): Promise<MongoUser> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
+    user.subscriptionTier = tier;
+    user.subscriptionStatus = status;
+    return user;
+  }
+  
+  async updateUserStripeInfo(userId: string, stripeInfo: { customerId: string, subscriptionId: string }): Promise<MongoUser> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
+    user.stripeCustomerId = stripeInfo.customerId;
+    user.stripeSubscriptionId = stripeInfo.subscriptionId;
+    return user;
+  }
+  
+  // Listing methods
+  async getListing(id: string): Promise<MongoListing | null> {
+    return this.listings.find(listing => listing._id === id) || null;
+  }
+  
+  async getListings(filters?: any): Promise<MongoListing[]> {
+    let result = [...this.listings];
+    
+    if (filters) {
+      if (filters.location) {
+        result = result.filter(listing => 
+          listing.location.toLowerCase().includes(filters.location.toLowerCase())
+        );
+      }
+      
+      if (filters.minPrice !== undefined) {
+        result = result.filter(listing => listing.price >= filters.minPrice);
+      }
+      
+      if (filters.maxPrice !== undefined) {
+        result = result.filter(listing => listing.price <= filters.maxPrice);
+      }
+      
+      if (filters.bedrooms !== undefined) {
+        result = result.filter(listing => listing.bedrooms >= filters.bedrooms);
+      }
+    }
+    
+    return result;
+  }
+  
+  async createListing(listingData: Omit<MongoListing, '_id' | 'createdAt'>): Promise<MongoListing> {
+    const newListing: MongoListing = {
+      _id: this.generateId(),
+      ...listingData,
+      createdAt: new Date()
+    };
+    this.listings.push(newListing);
+    return newListing;
+  }
+  
+  // Appointment methods
+  async getAppointment(id: string): Promise<MongoAppointment | null> {
+    return this.appointments.find(appointment => appointment._id === id) || null;
+  }
+  
+  async getUserAppointments(userId: string): Promise<MongoAppointment[]> {
+    return this.appointments.filter(appointment => appointment.userId === userId);
+  }
+  
+  async createAppointment(appointmentData: Omit<MongoAppointment, '_id' | 'createdAt' | 'status'>): Promise<MongoAppointment> {
+    const newAppointment: MongoAppointment = {
+      _id: this.generateId(),
+      ...appointmentData,
+      status: 'pending',
+      createdAt: new Date()
+    };
+    this.appointments.push(newAppointment);
+    return newAppointment;
+  }
+  
+  async updateAppointmentStatus(id: string, status: string): Promise<MongoAppointment> {
+    const appointment = await this.getAppointment(id);
+    if (!appointment) {
+      throw new Error(`Appointment with ID ${id} not found`);
+    }
+    
+    appointment.status = status;
+    return appointment;
+  }
+  
+  // Subscription plan methods
+  async getSubscriptionPlans(): Promise<MongoSubscriptionPlan[]> {
+    return this.subscriptionPlans;
+  }
+  
+  async getSubscriptionPlan(id: string): Promise<MongoSubscriptionPlan | null> {
+    return this.subscriptionPlans.find(plan => plan._id === id) || null;
+  }
+  
+  // Chat methods
+  async getConversation(id: string): Promise<MongoConversation | null> {
+    return this.conversations.find(convo => convo._id === id) || null;
+  }
+  
+  async getUserConversations(userId: string): Promise<MongoConversation[]> {
+    return this.conversations.filter(convo => convo.userId === userId)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  }
+  
+  async createConversation(conversationData: { userId: string, title?: string }): Promise<MongoConversation> {
+    const now = new Date();
+    const newConversation: MongoConversation = {
+      _id: this.generateId(),
+      userId: conversationData.userId,
+      title: conversationData.title || 'New Conversation',
+      createdAt: now,
+      updatedAt: now
+    };
+    this.conversations.push(newConversation);
+    return newConversation;
+  }
+  
+  async getMessages(conversationId: string): Promise<MongoMessage[]> {
+    return this.messages.filter(msg => msg.conversationId === conversationId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+  
+  async createMessage(messageData: { conversationId: string; content: string; role: string }): Promise<MongoMessage> {
+    const newMessage: MongoMessage = {
+      _id: this.generateId(),
+      ...messageData,
+      createdAt: new Date()
+    };
+    this.messages.push(newMessage);
+    
+    // Update conversation updatedAt
+    const conversation = await this.getConversation(messageData.conversationId);
+    if (conversation) {
+      conversation.updatedAt = new Date();
+    }
+    
+    return newMessage;
+  }
+}
+
+// First try to use MongoDB, and if it fails, fall back to mock storage
+let usingMockStorage = false;
+try {
+  // Check if MongoDB URI is valid
+  const mongoUri = process.env.MONGODB_URI || '';
+  if (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://')) {
+    console.warn('Invalid MongoDB URI format, using mock storage');
+    usingMockStorage = true;
+  }
+} catch (error) {
+  console.warn('Error checking MongoDB URI, using mock storage:', error);
+  usingMockStorage = true;
+}
+
+export const storage = usingMockStorage ? new MockStorage() : new MongoStorage();

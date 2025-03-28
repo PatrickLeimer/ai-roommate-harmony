@@ -39,15 +39,8 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
-    // Initialize MongoDB connection and database - catch errors here
-    try {
-      await storage.initializeDatabase();
-      console.log('MongoDB database initialized successfully');
-    } catch (dbError) {
-      console.warn('MongoDB database initialization failed:', dbError);
-      console.warn('Continuing with limited functionality');
-      // Continue execution even with database errors
-    }
+    // Initialize database (either MongoDB or mock storage)
+    await storage.initializeDatabase();
     
     const server = await registerRoutes(app);
 
