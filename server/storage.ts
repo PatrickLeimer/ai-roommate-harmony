@@ -374,15 +374,21 @@ export class MongoStorage implements IStorage {
   }
   
   async getSubscriptionPlan(id: string): Promise<MongoSubscriptionPlan | null> {
-    // Check if id is one of our string IDs
-    if (id === "1" || id === "2" || id === "3") {
-      // For string IDs like "1", "2", "3" use _id field
-      return await SubscriptionPlan.findOne({ _id: id }).lean();
-    } else if (Types.ObjectId.isValid(id)) {
-      // For ObjectId format IDs use findById
-      return await SubscriptionPlan.findById(id).lean();
+    try {
+      // For numeric string IDs ("1", "2", "3"), find by index
+      if (id === "1" || id === "2" || id === "3") {
+        const index = parseInt(id) - 1;
+        const plans = await this.getSubscriptionPlans();
+        return plans[index] || null;
+      } else if (Types.ObjectId.isValid(id)) {
+        // For MongoDB ObjectId format, use findById
+        return await SubscriptionPlan.findById(id).lean();
+      }
+      return null;
+    } catch (error) {
+      console.error("Error in getSubscriptionPlan:", error);
+      return null;
     }
-    return null;
   }
   
   // Chat methods

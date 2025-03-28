@@ -8,7 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
 type PricingPlan = {
-  id: number;
+  _id: string;  // MongoDB ObjectId as string
+  id?: number;  // Legacy id (optional)
   name: string;
   price: number;
   interval: string;
@@ -85,6 +86,7 @@ export default function PricingSection() {
       (Array.isArray(plan.features) ? plan.features : [])
   })) : [
     {
+      _id: "67e6ec96370d4e5cf2fdc85e",  // Using actual MongoDB IDs
       id: 1,
       name: "Free Trial",
       price: 0,
@@ -97,6 +99,7 @@ export default function PricingSection() {
       stripePriceId: "price_free"
     },
     {
+      _id: "67e6ec96370d4e5cf2fdc85f", 
       id: 2,
       name: "Monthly",
       price: 1900,
@@ -107,9 +110,10 @@ export default function PricingSection() {
         "Full AI chat assistance",
         "Lease contract analysis"
       ],
-      stripePriceId: "price_monthly"
+      stripePriceId: "price_1R59GJCkzXLayljknE1GHw3R"
     },
     {
+      _id: "67e6ec96370d4e5cf2fdc860",
       id: 3,
       name: "Annual",
       price: 16900,
@@ -121,7 +125,7 @@ export default function PricingSection() {
         "Advanced lease contract analysis",
         "Priority results & early access"
       ],
-      stripePriceId: "price_annual"
+      stripePriceId: "price_1R59HPCkzXLayljkKrZvvldx"
     }
   ];
 
@@ -178,7 +182,7 @@ export default function PricingSection() {
                 <span className="text-base font-medium text-gray-500">/mo</span>
               </p>
               <Button 
-                onClick={() => handleSubscribe("1")} 
+                onClick={() => handleSubscribe(plans?.[0]?._id?.toString() || "1")} 
                 variant="outline" 
                 className="mt-8 w-full"
                 disabled={subscribeMutation.isPending}
@@ -228,7 +232,7 @@ export default function PricingSection() {
                 <span className="text-base font-medium text-gray-500">/mo</span>
               </p>
               <Button 
-                onClick={() => handleSubscribe("2")} 
+                onClick={() => handleSubscribe(plans?.[1]?._id?.toString() || "2")} 
                 className="mt-8 w-full"
                 disabled={subscribeMutation.isPending}
               >
@@ -274,7 +278,7 @@ export default function PricingSection() {
                 <span className="text-base font-medium text-gray-500">/year</span>
               </p>
               <Button 
-                onClick={() => handleSubscribe("3")} 
+                onClick={() => handleSubscribe(plans?.[2]?._id?.toString() || "3")} 
                 variant="secondary" 
                 className="mt-8 w-full"
                 disabled={subscribeMutation.isPending}
