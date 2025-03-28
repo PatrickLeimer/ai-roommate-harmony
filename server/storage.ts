@@ -1,93 +1,149 @@
-import { 
-  users, type User, type InsertUser,
-  listings, type Listing, type InsertListing,
-  appointments, type Appointment, type InsertAppointment,
-  subscriptionPlans, type SubscriptionPlan, type InsertSubscriptionPlan,
-  conversations, type Conversation, type InsertConversation,
-  messages, type Message, type InsertMessage
-} from "@shared/schema";
+import { Types } from 'mongoose';
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import {
+  User, Listing, Appointment, SubscriptionPlan, Conversation, Message,
+  connectToDatabase
+} from './mongodb';
 
 const MemoryStore = createMemoryStore(session);
 
-export interface IStorage {
-  // User operations
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUserSubscription(userId: number, tier: string, status: string): Promise<User>;
-  updateUserStripeInfo(userId: number, stripeInfo: { customerId: string, subscriptionId: string }): Promise<User>;
-  
-  // Listing operations
-  getListing(id: number): Promise<Listing | undefined>;
-  getListings(filters?: any): Promise<Listing[]>;
-  createListing(listing: InsertListing): Promise<Listing>;
-  
-  // Appointment operations
-  getAppointment(id: number): Promise<Appointment | undefined>;
-  getUserAppointments(userId: number): Promise<Appointment[]>;
-  createAppointment(appointment: InsertAppointment): Promise<Appointment>;
-  updateAppointmentStatus(id: number, status: string): Promise<Appointment>;
-  
-  // Subscription operations
-  getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
-  getSubscriptionPlan(id: number): Promise<SubscriptionPlan | undefined>;
-  
-  // Chat operations
-  getConversation(id: number): Promise<Conversation | undefined>;
-  getUserConversations(userId: number): Promise<Conversation[]>;
-  createConversation(conversation: InsertConversation): Promise<Conversation>;
-  getMessages(conversationId: number): Promise<Message[]>;
-  createMessage(message: InsertMessage): Promise<Message>;
-  
-  // Session store
-  sessionStore: session.SessionStore;
+// Define types for MongoDB documents
+export interface MongoUser {
+  _id: string;
+  username: string;
+  email: string;
+  password: string;
+  subscriptionTier: string;
+  subscriptionStatus: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  createdAt: Date;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private listings: Map<number, Listing>;
-  private appointments: Map<number, Appointment>;
-  private subscriptionPlans: Map<number, SubscriptionPlan>;
-  private conversations: Map<number, Conversation>;
-  private messages: Map<number, Message>;
-  
-  currentUserId: number;
-  currentListingId: number;
-  currentAppointmentId: number;
-  currentSubscriptionPlanId: number;
-  currentConversationId: number;
-  currentMessageId: number;
-  
-  sessionStore: session.SessionStore;
+export interface MongoListing {
+  _id: string;
+  title: string;
+  description: string;
+  price: number;
+  location: string;
+  bedrooms: number;
+  bathrooms: number;
+  size?: number;
+  imageUrl?: string;
+  contactInfo: string;
+  nearestTransport?: string;
+  transportDistance?: string;
+  createdAt: Date;
+}
 
+export interface MongoAppointment {
+  _id: string;
+  userId: string;
+  listingId: string;
+  scheduledTime: Date;
+  status: string;
+  notes?: string;
+  createdAt: Date;
+}
+
+export interface MongoSubscriptionPlan {
+  _id: string;
+  name: string;
+  price: number;
+  interval: string;
+  features: string; // JSON string of features
+  stripePriceId?: string;
+}
+
+export interface MongoConversation {
+  _id: string;
+  userId: string;
+  title?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MongoMessage {
+  _id: string;
+  conversationId: string;
+  content: string;
+  role: string;
+  createdAt: Date;
+}
+
+export interface IStorage {
+  // User operations
+  getUser(id: string): Promise<MongoUser | null>;
+  getUserByUsername(username: string): Promise<MongoUser | null>;
+  getUserByEmail(email: string): Promise<MongoUser | null>;
+  createUser(user: { username: string; email: string; password: string }): Promise<MongoUser>;
+  updateUserSubscription(userId: string, tier: string, status: string): Promise<MongoUser>;
+  updateUserStripeInfo(userId: string, stripeInfo: { customerId: string, subscriptionId: string }): Promise<MongoUser>;
+  
+  // Listing operations
+  getListing(id: string): Promise<MongoListing | null>;
+  getListings(filters?: any): Promise<MongoListing[]>;
+  createListing(listing: Omit<MongoListing, '_id' | 'createdAt'>): Promise<MongoListing>;
+  
+  // Appointment operations
+  getAppointment(id: string): Promise<MongoAppointment | null>;
+  getUserAppointments(userId: string): Promise<MongoAppointment[]>;
+  createAppointment(appointment: Omit<MongoAppointment, '_id' | 'createdAt' | 'status'>): Promise<MongoAppointment>;
+  updateAppointmentStatus(id: string, status: string): Promise<MongoAppointment>;
+  
+  // Subscription operations
+  getSubscriptionPlans(): Promise<MongoSubscriptionPlan[]>;
+  getSubscriptionPlan(id: string): Promise<MongoSubscriptionPlan | null>;
+  
+  // Chat operations
+  getConversation(id: string): Promise<MongoConversation | null>;
+  getUserConversations(userId: string): Promise<MongoConversation[]>;
+  createConversation(conversation: { userId: string, title?: string }): Promise<MongoConversation>;
+  getMessages(conversationId: string): Promise<MongoMessage[]>;
+  createMessage(message: { conversationId: string; content: string; role: string }): Promise<MongoMessage>;
+  
+  // Session store
+  sessionStore: session.Store;
+  
+  // Initialize database
+  initializeDatabase(): Promise<void>;
+}
+
+// MongoDB storage implementation
+export class MongoStorage implements IStorage {
+  // Session store
+  sessionStore: session.Store;
+  
   constructor() {
-    this.users = new Map();
-    this.listings = new Map();
-    this.appointments = new Map();
-    this.subscriptionPlans = new Map();
-    this.conversations = new Map();
-    this.messages = new Map();
-    
-    this.currentUserId = 1;
-    this.currentListingId = 1;
-    this.currentAppointmentId = 1;
-    this.currentSubscriptionPlanId = 1;
-    this.currentConversationId = 1;
-    this.currentMessageId = 1;
-    
+    // Initialize session store
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // prune expired entries every 24h
     });
-    
-    // Initialize with subscription plans
-    this.initializeSubscriptionPlans();
   }
-
-  private initializeSubscriptionPlans() {
-    const freePlan: InsertSubscriptionPlan = {
+  
+  async initializeDatabase(): Promise<void> {
+    try {
+      const connection = await connectToDatabase();
+      if (connection === null) {
+        console.warn('Running with limited functionality since MongoDB connection failed');
+        return;
+      }
+      
+      // Initialize subscription plans if none exist
+      const plansCount = await SubscriptionPlan.countDocuments();
+      if (plansCount === 0) {
+        await this.initializeSubscriptionPlans();
+      }
+    } catch (error) {
+      console.error('Database initialization error:', error);
+      console.warn('Running with limited functionality');
+      // Don't throw - let app run with limitations
+    }
+  }
+  
+  private async initializeSubscriptionPlans(): Promise<void> {
+    const freePlan = {
       name: "Free Trial",
       price: 0,
       interval: "monthly",
@@ -99,7 +155,7 @@ export class MemStorage implements IStorage {
       stripePriceId: "price_free"
     };
     
-    const monthlyPlan: InsertSubscriptionPlan = {
+    const monthlyPlan = {
       name: "Monthly",
       price: 1900, // $19.00
       interval: "monthly",
@@ -112,7 +168,7 @@ export class MemStorage implements IStorage {
       stripePriceId: process.env.STRIPE_MONTHLY_PRICE_ID || "price_monthly"
     };
     
-    const annualPlan: InsertSubscriptionPlan = {
+    const annualPlan = {
       name: "Annual",
       price: 16900, // $169.00
       interval: "yearly",
@@ -126,203 +182,249 @@ export class MemStorage implements IStorage {
       stripePriceId: process.env.STRIPE_ANNUAL_PRICE_ID || "price_annual"
     };
     
-    this.createSubscriptionPlan(freePlan);
-    this.createSubscriptionPlan(monthlyPlan);
-    this.createSubscriptionPlan(annualPlan);
+    await SubscriptionPlan.create([freePlan, monthlyPlan, annualPlan]);
+    console.log('Subscription plans initialized');
   }
-
+  
   // User methods
-  async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+  async getUser(id: string): Promise<MongoUser | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await User.findById(id).lean();
   }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username.toLowerCase() === username.toLowerCase()
-    );
+  
+  async getUserByUsername(username: string): Promise<MongoUser | null> {
+    return await User.findOne({ username: { $regex: new RegExp(`^${username}$`, 'i') } }).lean();
   }
-
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email.toLowerCase() === email.toLowerCase()
-    );
+  
+  async getUserByEmail(email: string): Promise<MongoUser | null> {
+    return await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }).lean();
   }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { 
-      ...insertUser, 
-      id,
-      stripeCustomerId: null,
-      stripeSubscriptionId: null,
-      subscriptionTier: "free",
-      subscriptionStatus: "inactive",
-      createdAt: new Date()
-    };
-    this.users.set(id, user);
+  
+  async createUser(userData: { username: string; email: string; password: string }): Promise<MongoUser> {
+    const newUser = new User({
+      ...userData,
+      subscriptionTier: 'free',
+      subscriptionStatus: 'inactive'
+    });
+    
+    await newUser.save();
+    return newUser.toObject();
+  }
+  
+  async updateUserSubscription(userId: string, tier: string, status: string): Promise<MongoUser> {
+    if (!Types.ObjectId.isValid(userId)) throw new Error(`Invalid user ID: ${userId}`);
+    
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { 
+        subscriptionTier: tier,
+        subscriptionStatus: status
+      },
+      { new: true }
+    ).lean();
+    
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
     return user;
   }
-
-  async updateUserSubscription(userId: number, tier: string, status: string): Promise<User> {
-    const user = await this.getUser(userId);
-    if (!user) throw new Error("User not found");
+  
+  async updateUserStripeInfo(userId: string, stripeInfo: { customerId: string, subscriptionId: string }): Promise<MongoUser> {
+    if (!Types.ObjectId.isValid(userId)) throw new Error(`Invalid user ID: ${userId}`);
     
-    const updatedUser: User = {
-      ...user,
-      subscriptionTier: tier,
-      subscriptionStatus: status
-    };
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { 
+        stripeCustomerId: stripeInfo.customerId,
+        stripeSubscriptionId: stripeInfo.subscriptionId
+      },
+      { new: true }
+    ).lean();
     
-    this.users.set(userId, updatedUser);
-    return updatedUser;
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
+    return user;
   }
-
-  async updateUserStripeInfo(userId: number, stripeInfo: { customerId: string, subscriptionId: string }): Promise<User> {
-    const user = await this.getUser(userId);
-    if (!user) throw new Error("User not found");
-    
-    const updatedUser: User = {
-      ...user,
-      stripeCustomerId: stripeInfo.customerId,
-      stripeSubscriptionId: stripeInfo.subscriptionId
-    };
-    
-    this.users.set(userId, updatedUser);
-    return updatedUser;
-  }
-
+  
   // Listing methods
-  async getListing(id: number): Promise<Listing | undefined> {
-    return this.listings.get(id);
+  async getListing(id: string): Promise<MongoListing | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await Listing.findById(id).lean();
   }
-
-  async getListings(filters?: any): Promise<Listing[]> {
-    let results = Array.from(this.listings.values());
+  
+  async getListings(filters?: any): Promise<MongoListing[]> {
+    let query = Listing.find();
     
     if (filters) {
       if (filters.location) {
-        results = results.filter(listing => 
-          listing.location.toLowerCase().includes(filters.location.toLowerCase())
-        );
+        query = query.where('location').regex(new RegExp(filters.location, 'i'));
       }
       
       if (filters.minPrice !== undefined) {
-        results = results.filter(listing => listing.price >= filters.minPrice);
+        query = query.where('price').gte(filters.minPrice);
       }
       
       if (filters.maxPrice !== undefined) {
-        results = results.filter(listing => listing.price <= filters.maxPrice);
+        query = query.where('price').lte(filters.maxPrice);
       }
       
       if (filters.bedrooms !== undefined) {
-        results = results.filter(listing => listing.bedrooms >= filters.bedrooms);
+        query = query.where('bedrooms').gte(filters.bedrooms);
       }
     }
     
-    return results;
+    return await query.lean();
   }
-
-  async createListing(insertListing: InsertListing): Promise<Listing> {
-    const id = this.currentListingId++;
-    const listing: Listing = { 
-      ...insertListing, 
-      id, 
-      createdAt: new Date() 
-    };
-    this.listings.set(id, listing);
-    return listing;
+  
+  async createListing(listingData: Omit<MongoListing, '_id' | 'createdAt'>): Promise<MongoListing> {
+    const newListing = new Listing(listingData);
+    await newListing.save();
+    return newListing.toObject();
   }
-
+  
   // Appointment methods
-  async getAppointment(id: number): Promise<Appointment | undefined> {
-    return this.appointments.get(id);
+  async getAppointment(id: string): Promise<MongoAppointment | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await Appointment.findById(id).lean();
   }
-
-  async getUserAppointments(userId: number): Promise<Appointment[]> {
-    return Array.from(this.appointments.values()).filter(
-      appointment => appointment.userId === userId
-    );
+  
+  async getUserAppointments(userId: string): Promise<MongoAppointment[]> {
+    if (!Types.ObjectId.isValid(userId)) return [];
+    return await Appointment.find({ userId }).lean();
   }
-
-  async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {
-    const id = this.currentAppointmentId++;
-    const appointment: Appointment = { 
-      ...insertAppointment, 
-      id, 
-      status: "pending",
-      createdAt: new Date() 
-    };
-    this.appointments.set(id, appointment);
+  
+  async createAppointment(appointmentData: Omit<MongoAppointment, '_id' | 'createdAt' | 'status'>): Promise<MongoAppointment> {
+    const newAppointment = new Appointment({
+      ...appointmentData,
+      status: 'pending'
+    });
+    
+    await newAppointment.save();
+    return newAppointment.toObject();
+  }
+  
+  async updateAppointmentStatus(id: string, status: string): Promise<MongoAppointment> {
+    if (!Types.ObjectId.isValid(id)) throw new Error(`Invalid appointment ID: ${id}`);
+    
+    const appointment = await Appointment.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    ).lean();
+    
+    if (!appointment) {
+      throw new Error(`Appointment with ID ${id} not found`);
+    }
+    
     return appointment;
   }
-
-  async updateAppointmentStatus(id: number, status: string): Promise<Appointment> {
-    const appointment = await this.getAppointment(id);
-    if (!appointment) throw new Error("Appointment not found");
-    
-    const updatedAppointment: Appointment = {
-      ...appointment,
-      status
-    };
-    
-    this.appointments.set(id, updatedAppointment);
-    return updatedAppointment;
-  }
-
+  
   // Subscription plan methods
-  async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
-    return Array.from(this.subscriptionPlans.values());
+  async getSubscriptionPlans(): Promise<MongoSubscriptionPlan[]> {
+    try {
+      return await SubscriptionPlan.find().sort({ price: 1 }).lean();
+    } catch (error) {
+      console.warn('Error getting subscription plans:', error);
+      // Return fallback subscription plans for UI testing
+      return [
+        {
+          _id: '1',
+          name: 'Free Trial',
+          price: 0,
+          interval: 'monthly',
+          features: JSON.stringify([
+            '3 property searches per week',
+            '1 scheduled viewing',
+            'Basic AI chat assistance'
+          ]),
+          stripePriceId: 'price_free'
+        },
+        {
+          _id: '2',
+          name: 'Monthly',
+          price: 1900,
+          interval: 'monthly',
+          features: JSON.stringify([
+            'Unlimited property searches',
+            '10 scheduled viewings',
+            'Full AI chat assistance',
+            'Lease contract analysis'
+          ]),
+          stripePriceId: 'price_monthly'
+        },
+        {
+          _id: '3',
+          name: 'Annual',
+          price: 16900,
+          interval: 'yearly',
+          features: JSON.stringify([
+            'Unlimited property searches',
+            'Unlimited scheduled viewings',
+            'Premium AI chat assistance',
+            'Advanced lease contract analysis',
+            'Priority results & early access'
+          ]),
+          stripePriceId: 'price_annual'
+        }
+      ];
+    }
   }
-
-  async getSubscriptionPlan(id: number): Promise<SubscriptionPlan | undefined> {
-    return this.subscriptionPlans.get(id);
+  
+  async getSubscriptionPlan(id: string): Promise<MongoSubscriptionPlan | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await SubscriptionPlan.findById(id).lean();
   }
-
-  private async createSubscriptionPlan(insertPlan: InsertSubscriptionPlan): Promise<SubscriptionPlan> {
-    const id = this.currentSubscriptionPlanId++;
-    const plan: SubscriptionPlan = { ...insertPlan, id };
-    this.subscriptionPlans.set(id, plan);
-    return plan;
-  }
-
+  
   // Chat methods
-  async getConversation(id: number): Promise<Conversation | undefined> {
-    return this.conversations.get(id);
+  async getConversation(id: string): Promise<MongoConversation | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await Conversation.findById(id).lean();
   }
-
-  async getUserConversations(userId: number): Promise<Conversation[]> {
-    return Array.from(this.conversations.values()).filter(
-      conversation => conversation.userId === userId
+  
+  async getUserConversations(userId: string): Promise<MongoConversation[]> {
+    if (!Types.ObjectId.isValid(userId)) return [];
+    return await Conversation.find({ userId }).sort({ updatedAt: -1 }).lean();
+  }
+  
+  async createConversation(conversationData: { userId: string, title?: string }): Promise<MongoConversation> {
+    if (!Types.ObjectId.isValid(conversationData.userId)) {
+      throw new Error(`Invalid user ID: ${conversationData.userId}`);
+    }
+    
+    const newConversation = new Conversation({
+      userId: conversationData.userId,
+      title: conversationData.title || 'New Conversation',
+      updatedAt: new Date()
+    });
+    
+    await newConversation.save();
+    return newConversation.toObject();
+  }
+  
+  async getMessages(conversationId: string): Promise<MongoMessage[]> {
+    if (!Types.ObjectId.isValid(conversationId)) return [];
+    return await Message.find({ conversationId }).sort({ createdAt: 1 }).lean();
+  }
+  
+  async createMessage(messageData: { conversationId: string; content: string; role: string }): Promise<MongoMessage> {
+    if (!Types.ObjectId.isValid(messageData.conversationId)) {
+      throw new Error(`Invalid conversation ID: ${messageData.conversationId}`);
+    }
+    
+    const newMessage = new Message(messageData);
+    await newMessage.save();
+    
+    // Update the conversation's updated_at timestamp
+    await Conversation.findByIdAndUpdate(
+      messageData.conversationId,
+      { updatedAt: new Date() }
     );
-  }
-
-  async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
-    const id = this.currentConversationId++;
-    const conversation: Conversation = { 
-      ...insertConversation, 
-      id, 
-      createdAt: new Date() 
-    };
-    this.conversations.set(id, conversation);
-    return conversation;
-  }
-
-  async getMessages(conversationId: number): Promise<Message[]> {
-    return Array.from(this.messages.values())
-      .filter(message => message.conversationId === conversationId)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  }
-
-  async createMessage(insertMessage: InsertMessage): Promise<Message> {
-    const id = this.currentMessageId++;
-    const message: Message = { 
-      ...insertMessage, 
-      id, 
-      createdAt: new Date() 
-    };
-    this.messages.set(id, message);
-    return message;
+    
+    return newMessage.toObject();
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new MongoStorage();

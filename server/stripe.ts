@@ -1,13 +1,12 @@
 import Stripe from "stripe";
 import { storage } from "./storage";
+import { User } from "./mongodb";
 
 // Initialize Stripe with API key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "your-stripe-secret-key", {
-  apiVersion: "2023-10-16",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
 // Create a checkout session for subscription
-export async function createSubscriptionCheckout(userId: number, planId: number) {
+export async function createSubscriptionCheckout(userId: string, planId: string) {
   try {
     const user = await storage.getUser(userId);
     if (!user) {
@@ -35,7 +34,7 @@ export async function createSubscriptionCheckout(userId: number, planId: number)
         email: user.email,
         name: user.username,
         metadata: {
-          userId: user.id.toString()
+          userId: user._id.toString()
         }
       });
       
@@ -62,13 +61,13 @@ export async function createSubscriptionCheckout(userId: number, planId: number)
       success_url: `${process.env.APP_URL || "http://localhost:5000"}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.APP_URL || "http://localhost:5000"}/subscription/cancel`,
       metadata: {
-        userId: user.id.toString(),
-        planId: plan.id.toString()
+        userId: user._id.toString(),
+        planId: plan._id.toString()
       }
     });
     
     return { success: true, sessionId: session.id, url: session.url };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating subscription checkout:", error);
     return { success: false, error: error.message };
   }
@@ -95,7 +94,7 @@ export async function handleWebhookEvent(event: Stripe.Event) {
     }
     
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error handling webhook event:", error);
     return { success: false, error: error.message };
   }
@@ -104,8 +103,8 @@ export async function handleWebhookEvent(event: Stripe.Event) {
 // Helper function to handle successful checkout
 async function handleSuccessfulCheckout(session: Stripe.Checkout.Session) {
   // Extract userId and planId from metadata
-  const userId = parseInt(session.metadata?.userId || "0", 10);
-  const planId = parseInt(session.metadata?.planId || "0", 10);
+  const userId = session.metadata?.userId;
+  const planId = session.metadata?.planId;
   
   if (!userId || !planId) {
     throw new Error("Missing user or plan information");
@@ -139,9 +138,7 @@ async function handleSuccessfulCheckout(session: Stripe.Checkout.Session) {
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   try {
     // Find user with this subscription ID
-    const users = (await Promise.all((await Array.from(storage.users.values())).map(
-      user => storage.getUser(user.id)
-    ))).filter(user => user && user.stripeSubscriptionId === subscription.id);
+    const users = await User.find({ stripeSubscriptionId: subscription.id }).lean();
     
     if (users.length === 0) {
       console.warn(`No user found with subscription ID: ${subscription.id}`);
@@ -175,9 +172,11 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
         (item.price.unit_amount === 1900 ? "monthly" : 
          item.price.unit_amount === 16900 ? "annual" : "unknown");
       
-      await storage.updateUserSubscription(user.id, planName.toLowerCase(), status);
+      // Cast user._id to string or use a safe approach
+      const userId = user._id ? (user._id as any).toString() : "";
+      await storage.updateUserSubscription(userId, planName.toLowerCase(), status);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating subscription:", error);
     throw error;
   }
@@ -187,9 +186,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 async function handleSubscriptionCancelled(subscription: Stripe.Subscription) {
   try {
     // Find user with this subscription ID
-    const users = (await Promise.all((await Array.from(storage.users.values())).map(
-      user => storage.getUser(user.id)
-    ))).filter(user => user && user.stripeSubscriptionId === subscription.id);
+    const users = await User.find({ stripeSubscriptionId: subscription.id }).lean();
     
     if (users.length === 0) {
       console.warn(`No user found with subscription ID: ${subscription.id}`);
@@ -198,9 +195,10 @@ async function handleSubscriptionCancelled(subscription: Stripe.Subscription) {
     
     const user = users[0];
     
-    // Update user subscription status to cancelled
-    await storage.updateUserSubscription(user.id, "free", "inactive");
-  } catch (error) {
+    // Cast user._id to string or use a safe approach
+    const userId = user._id ? (user._id as any).toString() : "";
+    await storage.updateUserSubscription(userId, "free", "inactive");
+  } catch (error: any) {
     console.error("Error cancelling subscription:", error);
     throw error;
   }
@@ -211,7 +209,7 @@ export async function getSubscriptionPlans() {
   try {
     const plans = await storage.getSubscriptionPlans();
     return { success: true, plans };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error getting subscription plans:", error);
     return { success: false, error: error.message };
   }

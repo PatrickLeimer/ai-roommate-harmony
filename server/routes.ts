@@ -1,13 +1,23 @@
 import type { Express, Request, Response } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, MongoUser } from "./storage";
 import { setupAuth } from "./auth";
 import { handleChatConversation, analyzeLease, generateListings } from "./openai";
 import { createSubscriptionCheckout, handleWebhookEvent, getSubscriptionPlans } from "./stripe";
 import Stripe from "stripe";
-import { insertAppointmentSchema } from "@shared/schema";
 import { z } from "zod";
+import { Types } from 'mongoose';
+
+// MongoDB ObjectId validation helper
+const isValidObjectId = (id: string): boolean => Types.ObjectId.isValid(id);
+
+// Add this to Express.User to fix type issues
+declare global {
+  namespace Express {
+    interface User extends MongoUser {}
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -26,14 +36,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const listings = await storage.getListings(filters);
       res.json(listings);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error fetching listings", error: error.message });
     }
   });
 
   app.get("/api/listings/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = req.params.id;
+      
+      if (!isValidObjectId(id)) {
+        return res.status(400).json({ message: "Invalid listing ID format" });
+      }
+      
       const listing = await storage.getListing(id);
       
       if (!listing) {
@@ -41,7 +56,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(listing);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error fetching listing", error: error.message });
     }
   });
@@ -59,14 +74,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Message is required" });
       }
       
+      // Handle user's MongoDB _id
+      const userId = req.user._id;
+      
       const response = await handleChatConversation(
-        req.user.id,
+        userId,
         message,
-        conversationId ? parseInt(conversationId, 10) : undefined
+        conversationId || undefined
       );
       
       res.json(response);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error processing chat", error: error.message });
     }
   });
@@ -77,9 +95,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const conversations = await storage.getUserConversations(req.user.id);
+      const conversations = await storage.getUserConversations(req.user._id);
       res.json(conversations);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error fetching conversations", error: error.message });
     }
   });
@@ -90,16 +108,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const conversationId = parseInt(req.params.id, 10);
+      const conversationId = req.params.id;
+      
+      if (!isValidObjectId(conversationId)) {
+        return res.status(400).json({ message: "Invalid conversation ID format" });
+      }
+      
       const conversation = await storage.getConversation(conversationId);
       
-      if (!conversation || conversation.userId !== req.user.id) {
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      
+      if (conversation.userId !== req.user._id) {
         return res.status(403).json({ message: "Unauthorized access to conversation" });
       }
       
       const messages = await storage.getMessages(conversationId);
       res.json(messages);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error fetching messages", error: error.message });
     }
   });
@@ -126,7 +153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const analysis = await analyzeLease(text);
       res.json({ analysis });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error analyzing lease", error: error.message });
     }
   });
@@ -138,14 +165,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      // Create a schema that ensures userId matches the authenticated user
-      const schema = insertAppointmentSchema
-        .refine(data => data.userId === req.user.id, {
-          message: "You can only create appointments for yourself",
-          path: ["userId"]
-        });
+      // Validate the data directly 
+      const appointmentSchema = z.object({
+        userId: z.string().refine(val => val === req.user._id.toString(), {
+          message: "You can only create appointments for yourself"
+        }),
+        listingId: z.string().refine(val => isValidObjectId(val), {
+          message: "Invalid listing ID format"
+        }),
+        scheduledTime: z.string().or(z.date()),
+        notes: z.string().optional()
+      });
       
-      const validatedData = schema.parse(req.body);
+      const validatedData = appointmentSchema.parse(req.body);
       
       // Check if listing exists
       const listing = await storage.getListing(validatedData.listingId);
@@ -153,8 +185,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Listing not found" });
       }
       
+      // Convert scheduledTime to Date if it's a string
+      const scheduledTime = typeof validatedData.scheduledTime === 'string' 
+        ? new Date(validatedData.scheduledTime) 
+        : validatedData.scheduledTime;
+      
       // Check appointment limits based on subscription
-      const userAppointments = await storage.getUserAppointments(req.user.id);
+      const userAppointments = await storage.getUserAppointments(req.user._id.toString());
       const pendingAppointments = userAppointments.filter(a => a.status !== "cancelled");
       
       if (req.user.subscriptionTier === "free" && pendingAppointments.length >= 1) {
@@ -169,7 +206,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const appointment = await storage.createAppointment(validatedData);
+      // Create appointment with proper date object
+      const appointment = await storage.createAppointment({
+        userId: validatedData.userId,
+        listingId: validatedData.listingId,
+        scheduledTime,
+        notes: validatedData.notes
+      });
       res.status(201).json(appointment);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -178,7 +221,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           errors: error.errors 
         });
       }
-      res.status(500).json({ message: "Error creating appointment", error: error.message });
+      
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ message: "Error creating appointment", error: errorMessage });
     }
   });
 
@@ -188,9 +233,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const appointments = await storage.getUserAppointments(req.user.id);
+      const appointments = await storage.getUserAppointments(req.user._id.toString());
       res.json(appointments);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error fetching appointments", error: error.message });
     }
   });
@@ -201,7 +246,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = req.params.id;
+      
+      if (!isValidObjectId(id)) {
+        return res.status(400).json({ message: "Invalid appointment ID format" });
+      }
+      
       const { status } = req.body;
       
       if (!status || !["pending", "confirmed", "cancelled"].includes(status)) {
@@ -214,13 +264,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Appointment not found" });
       }
       
-      if (appointment.userId !== req.user.id) {
+      if (appointment.userId !== req.user._id.toString()) {
         return res.status(403).json({ message: "You can only update your own appointments" });
       }
       
       const updatedAppointment = await storage.updateAppointmentStatus(id, status);
       res.json(updatedAppointment);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error updating appointment", error: error.message });
     }
   });
@@ -228,14 +278,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscription management
   app.get("/api/subscription-plans", async (req, res) => {
     try {
-      const result = await getSubscriptionPlans();
+      // First try getting plans from MongoDB
+      const plans = await storage.getSubscriptionPlans();
       
-      if (result.success) {
-        res.json(result.plans);
+      if (plans.length > 0) {
+        res.json(plans);
       } else {
-        res.status(500).json({ message: "Error fetching subscription plans", error: result.error });
+        // Fallback to Stripe
+        const result = await getSubscriptionPlans();
+        
+        if (result.success) {
+          res.json(result.plans);
+        } else {
+          res.status(500).json({ message: "Error fetching subscription plans", error: result.error });
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error fetching subscription plans", error: error.message });
     }
   });
@@ -252,14 +310,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Plan ID is required" });
       }
       
-      const result = await createSubscriptionCheckout(req.user.id, parseInt(planId, 10));
+      const result = await createSubscriptionCheckout(req.user._id.toString(), planId);
       
       if (result.success) {
         res.json(result);
       } else {
         res.status(500).json({ message: "Error creating subscription", error: result.error });
       }
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error creating subscription", error: error.message });
     }
   });
@@ -276,9 +334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error("Missing Stripe signature or endpoint secret");
       }
       
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "your-stripe-secret-key", {
-        apiVersion: "2023-10-16",
-      });
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
       
       event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
       
@@ -290,7 +346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Webhook error:", result.error);
         res.status(400).json({ received: false, error: result.error });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Webhook error:", error.message);
       res.status(400).json({ received: false, error: error.message });
     }
@@ -298,7 +354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Demo API to seed listings (could be removed in production)
   app.post("/api/demo/generate-listings", async (req, res) => {
-    if (!req.isAuthenticated() || req.user.id !== 1) { // Only admin can use this
+    if (!req.isAuthenticated()) {
       return res.status(403).json({ message: "Unauthorized" });
     }
     
@@ -317,7 +373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       res.json({ listings: savedListings });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error generating listings", error: error.message });
     }
   });

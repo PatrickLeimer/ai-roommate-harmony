@@ -4,15 +4,15 @@ import { Express } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { storage } from "./storage";
-import { User as SelectUser, insertUserSchema } from "@shared/schema";
+import { storage, MongoUser } from "./storage";
 import { z } from "zod";
 
-declare global {
-  namespace Express {
-    interface User extends SelectUser {}
-  }
-}
+// Already defined in routes.ts
+// declare global {
+//   namespace Express {
+//     interface User extends MongoUser {}
+//   }
+// }
 
 const scryptAsync = promisify(scrypt);
 
@@ -29,8 +29,9 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-// Extended schema with email field validation
-const registerSchema = insertUserSchema.extend({
+// New registration schema for MongoDB
+const registerSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
@@ -69,8 +70,12 @@ export function setupAuth(app: Express) {
     }),
   );
 
-  passport.serializeUser((user, done) => done(null, user.id));
-  passport.deserializeUser(async (id: number, done) => {
+  // Use MongoDB _id for session serialization
+  passport.serializeUser((user, done) => {
+    done(null, user._id);
+  });
+  
+  passport.deserializeUser(async (id: string, done) => {
     try {
       const user = await storage.getUser(id);
       done(null, user);
@@ -125,7 +130,7 @@ export function setupAuth(app: Express) {
     passport.authenticate("local", (err, user, info) => {
       if (err) return next(err);
       if (!user) {
-        return res.status(401).json({ message: info.message || "Authentication failed" });
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
       }
       req.login(user, (err) => {
         if (err) return next(err);

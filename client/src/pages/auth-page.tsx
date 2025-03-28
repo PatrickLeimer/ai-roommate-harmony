@@ -155,7 +155,10 @@ export default function AuthPage() {
                 </CardContent>
                 <CardFooter>
                   <p className="text-sm text-gray-500">
-                    Don't have an account? <TabsTrigger value="register" className="p-0 text-primary underline">Register</TabsTrigger>
+                    Don't have an account? <span className="p-0 text-primary underline cursor-pointer" onClick={() => {
+                      const element = document.querySelector('[value="register"]') as HTMLElement;
+                      element?.click();
+                    }}>Register</span>
                   </p>
                 </CardFooter>
               </Card>
@@ -243,7 +246,10 @@ export default function AuthPage() {
                 </CardContent>
                 <CardFooter>
                   <p className="text-sm text-gray-500">
-                    Already have an account? <TabsTrigger value="login" className="p-0 text-primary underline">Login</TabsTrigger>
+                    Already have an account? <span className="p-0 text-primary underline cursor-pointer" onClick={() => {
+                      const element = document.querySelector('[value="login"]') as HTMLElement;
+                      element?.click();
+                    }}>Login</span>
                   </p>
                 </CardFooter>
               </Card>

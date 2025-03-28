@@ -1,21 +1,21 @@
 import OpenAI from "openai";
 import { storage } from "./storage";
-import type { InsertListing } from "@shared/schema";
+import { Types } from 'mongoose';
 
 // Initialize OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "your-api-key" });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const MODEL = "gpt-4o";
 
 // Function to handle chat conversations
-export async function handleChatConversation(userId: number, userMessage: string, conversationId?: number) {
+export async function handleChatConversation(userId: string, userMessage: string, conversationId?: string) {
   try {
     // Get or create conversation
     let conversation;
     let messages;
     
-    if (conversationId) {
+    if (conversationId && Types.ObjectId.isValid(conversationId)) {
       conversation = await storage.getConversation(conversationId);
       if (!conversation || conversation.userId !== userId) {
         throw new Error("Conversation not found or unauthorized");
@@ -23,12 +23,15 @@ export async function handleChatConversation(userId: number, userMessage: string
       messages = await storage.getMessages(conversationId);
     } else {
       // Create a new conversation
-      conversation = await storage.createConversation({ userId });
+      conversation = await storage.createConversation({ 
+        userId,
+        title: userMessage.length > 30 ? userMessage.substring(0, 30) + '...' : userMessage
+      });
       messages = [];
       
       // Add system message to set the assistant's behavior
       await storage.createMessage({
-        conversationId: conversation.id,
+        conversationId: conversation._id,
         content: "You are FlatMate AI, a helpful assistant specializing in housing search. You can help users find rental properties, understand leases, and schedule viewings. When a user asks for a property search, you should extract their preferences (location, budget, bedrooms, etc.) and respond with suitable matches.",
         role: "system"
       });
@@ -36,13 +39,13 @@ export async function handleChatConversation(userId: number, userMessage: string
     
     // Add user message to database
     await storage.createMessage({
-      conversationId: conversation.id,
+      conversationId: conversation._id,
       content: userMessage,
       role: "user"
     });
     
     // Get complete message history including the new user message
-    messages = await storage.getMessages(conversation.id);
+    messages = await storage.getMessages(conversation._id);
     
     // Format messages for OpenAI
     const formattedMessages = messages.map(msg => ({
@@ -65,7 +68,7 @@ export async function handleChatConversation(userId: number, userMessage: string
         // Format listings for response
         const formattedListings = listings.map(listing => 
           `- **${listing.title}** in ${listing.location}
-           ${listing.bedrooms} bedroom, ${listing.bathrooms} bathroom, ${listing.size}m²
+           ${listing.bedrooms} bedroom, ${listing.bathrooms} bathroom, ${listing.size ? listing.size + 'm²' : 'size not specified'}
            €${listing.price}/month
            ${listing.nearestTransport ? `${listing.transportDistance} to ${listing.nearestTransport}` : ''}`
         ).join('\n\n');
@@ -77,7 +80,7 @@ export async function handleChatConversation(userId: number, userMessage: string
       
       // Save AI response to database
       const assistantMessage = await storage.createMessage({
-        conversationId: conversation.id,
+        conversationId: conversation._id,
         content: responseContent,
         role: "assistant"
       });
@@ -99,7 +102,7 @@ export async function handleChatConversation(userId: number, userMessage: string
       
       // Save AI response to database
       const assistantMessage = await storage.createMessage({
-        conversationId: conversation.id,
+        conversationId: conversation._id,
         content: responseContent || "I'm not sure how to respond to that.",
         role: "assistant"
       });
@@ -213,7 +216,7 @@ export async function analyzeLease(text: string) {
 }
 
 // Function to generate listings based on search criteria
-export async function generateListings(criteria: any): Promise<InsertListing[]> {
+export async function generateListings(criteria: any): Promise<any[]> {
   try {
     // This function would typically be used for demo/testing purposes
     // In production, you'd use real listings from a database or web scraping
