@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Users, Buildings, CalendarCheck, Clock } from 'lucide-react';
+import { Users, Building, CalendarCheck, Clock } from 'lucide-react';
 
 interface StatItemProps {
   icon: React.ReactNode;
@@ -47,7 +47,7 @@ const Stats = () => {
             delay={100}
           />
           <StatItem 
-            icon={<Buildings size={28} />}
+            icon={<Building size={28} />}
             value="25,000+"
             label="Properties Listed"
             delay={200}
