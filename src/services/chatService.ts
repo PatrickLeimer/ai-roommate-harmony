@@ -1,5 +1,6 @@
 
 import { v4 as uuidv4 } from 'uuid';
+import OpenAI from 'openai';
 
 export interface Message {
   id: string;
@@ -50,22 +51,71 @@ const propertySuggestions: PropertySuggestion[] = [
 ];
 
 class ChatService {
-  // This would normally connect to a real backend
+  private openai: OpenAI | null = null;
+  
+  constructor() {
+    // Initialize OpenAI client if API key is available
+    const apiKey = localStorage.getItem('openai_api_key');
+    if (apiKey) {
+      this.openai = new OpenAI({
+        apiKey,
+        dangerouslyAllowBrowser: true // Note: In production, API calls should be made from a backend
+      });
+    }
+  }
+
+  setApiKey(apiKey: string) {
+    localStorage.setItem('openai_api_key', apiKey);
+    this.openai = new OpenAI({
+      apiKey,
+      dangerouslyAllowBrowser: true
+    });
+    return this.openai !== null;
+  }
+
+  hasApiKey() {
+    return localStorage.getItem('openai_api_key') !== null;
+  }
+
   async sendMessage(message: string): Promise<{ response: Message, showProperties: boolean }> {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const response: Message = {
-      id: uuidv4(),
-      role: 'assistant',
-      content: this.generateResponse(message),
-      timestamp: new Date()
-    };
-    
     // Determine if we should show property suggestions
     const showProperties = message.toLowerCase().includes('apartment') || 
                           message.toLowerCase().includes('house') || 
                           message.toLowerCase().includes('property');
+    
+    let content = '';
+    
+    try {
+      if (this.openai) {
+        // Use OpenAI to generate a response
+        const chatCompletion = await this.openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system", 
+              content: "You are FlatMate AI, a helpful AI assistant for finding housing and answering questions related to rentals, apartments, and real estate. Be concise and friendly."
+            },
+            { role: "user", content: message }
+          ],
+          max_tokens: 150,
+        });
+        
+        content = chatCompletion.choices[0].message.content || "I'm sorry, I couldn't generate a response.";
+      } else {
+        // Fallback to hardcoded responses if OpenAI is not available
+        content = this.generateResponse(message);
+      }
+    } catch (error) {
+      console.error("Error calling OpenAI API:", error);
+      content = "I apologize, but I encountered an error processing your request. Please try again later.";
+    }
+    
+    const response: Message = {
+      id: uuidv4(),
+      role: 'assistant',
+      content,
+      timestamp: new Date()
+    };
     
     return { response, showProperties };
   }
