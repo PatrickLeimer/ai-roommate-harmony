@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -73,7 +72,7 @@ const APISettings = () => {
           </DialogDescription>
         </DialogHeader>
         
-        <Alert variant="warning" className="mb-4">
+        <Alert variant="destructive" className="mb-4">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             This is a browser-based demo with simulated storage. In a production environment, APIs would be called securely from a backend server.
