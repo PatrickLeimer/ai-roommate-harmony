@@ -165,7 +165,7 @@ export class MongoStorage implements IStorage {
         "Full AI chat assistance",
         "Lease contract analysis"
       ]),
-      stripePriceId: process.env.STRIPE_MONTHLY_PRICE_ID || "price_monthly"
+      stripePriceId: process.env.STRIPE_MONTHLY_PRICE_ID || "price_1R59GJCkzXLayljknE1GHw3R"
     };
     
     const annualPlan = {
@@ -179,7 +179,7 @@ export class MongoStorage implements IStorage {
         "Advanced lease contract analysis",
         "Priority results & early access"
       ]),
-      stripePriceId: process.env.STRIPE_ANNUAL_PRICE_ID || "price_annual"
+      stripePriceId: process.env.STRIPE_ANNUAL_PRICE_ID || "price_1R59HPCkzXLayljkKrZvvldx"
     };
     
     await SubscriptionPlan.create([freePlan, monthlyPlan, annualPlan]);
@@ -353,7 +353,7 @@ export class MongoStorage implements IStorage {
             'Full AI chat assistance',
             'Lease contract analysis'
           ]),
-          stripePriceId: 'price_monthly'
+          stripePriceId: process.env.STRIPE_MONTHLY_PRICE_ID || 'price_1R59GJCkzXLayljknE1GHw3R'
         },
         {
           _id: '3',
@@ -367,7 +367,7 @@ export class MongoStorage implements IStorage {
             'Advanced lease contract analysis',
             'Priority results & early access'
           ]),
-          stripePriceId: 'price_annual'
+          stripePriceId: process.env.STRIPE_ANNUAL_PRICE_ID || 'price_1R59HPCkzXLayljkKrZvvldx'
         }
       ];
     }
@@ -447,7 +447,7 @@ export class MockStorage implements IStorage {
       checkPeriod: 86400000 // prune expired entries every 24h
     });
     
-    // Add default subscription plans
+    // Add default subscription plans with actual Stripe price IDs
     this.subscriptionPlans = [
       {
         _id: '1',
@@ -472,7 +472,7 @@ export class MockStorage implements IStorage {
           'Full AI chat assistance',
           'Lease contract analysis'
         ]),
-        stripePriceId: 'price_monthly'
+        stripePriceId: process.env.STRIPE_MONTHLY_PRICE_ID || 'price_1R59GJCkzXLayljknE1GHw3R'
       },
       {
         _id: '3',
@@ -486,7 +486,7 @@ export class MockStorage implements IStorage {
           'Advanced lease contract analysis',
           'Priority results & early access'
         ]),
-        stripePriceId: 'price_annual'
+        stripePriceId: process.env.STRIPE_ANNUAL_PRICE_ID || 'price_1R59HPCkzXLayljkKrZvvldx'
       }
     ];
   }
