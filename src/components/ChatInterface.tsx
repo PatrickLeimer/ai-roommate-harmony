@@ -3,26 +3,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Home, Building, DollarSign, Map, Calendar } from 'lucide-react';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
-
-interface PropertySuggestion {
-  id: string;
-  title: string;
-  price: string;
-  location: string;
-  beds: number;
-  baths: number;
-  image: string;
-}
+import { chatService, Message, PropertySuggestion } from '@/services/chatService';
+import { useToast } from '@/hooks/use-toast';
 
 const ChatInterface = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
+      id: 'welcome-message',
       role: 'assistant',
       content: 'Hi there! I\'m your FlatMate AI assistant. How can I help with your housing search today?',
       timestamp: new Date()
@@ -31,98 +18,63 @@ const ChatInterface = () => {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showPropertySuggestions, setShowPropertySuggestions] = useState(false);
+  const [propertySuggestions, setPropertySuggestions] = useState<PropertySuggestion[]>([]);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
-
-  // Mock property suggestions
-  const propertySuggestions: PropertySuggestion[] = [
-    {
-      id: '1',
-      title: 'Modern Downtown Apartment',
-      price: '$1,750/mo',
-      location: 'Downtown',
-      beds: 2,
-      baths: 1,
-      image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80'
-    },
-    {
-      id: '2',
-      title: 'Cozy Midtown Studio',
-      price: '$1,200/mo',
-      location: 'Midtown',
-      beds: 1,
-      baths: 1,
-      image: 'https://images.unsplash.com/photo-1493809842364-78817add7ffb?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80'
-    },
-    {
-      id: '3',
-      title: 'Spacious 2BR near University',
-      price: '$1,850/mo',
-      location: 'University District',
-      beds: 2,
-      baths: 2,
-      image: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80'
-    }
-  ];
+  const { toast } = useToast();
 
   // Scroll to bottom whenever messages update
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    if (showPropertySuggestions) {
+      // In a real app, we'd fetch these based on user preferences
+      setPropertySuggestions(chatService.getPropertySuggestions());
+    }
+  }, [showPropertySuggestions]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (inputValue.trim() === '') return;
     
     // Add user message
     const userMessage: Message = {
+      id: `user-${Date.now()}`,
       role: 'user',
       content: inputValue,
       timestamp: new Date()
     };
     
-    setMessages([...messages, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
     
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        role: 'assistant',
-        content: generateAIResponse(inputValue),
-        timestamp: new Date()
-      };
+    try {
+      // Send message to service
+      const { response, showProperties } = await chatService.sendMessage(inputValue);
       
-      setMessages(prev => [...prev, aiResponse]);
-      setIsTyping(false);
+      // Add AI response
+      setMessages(prev => [...prev, response]);
       
-      // Show property suggestions if user asks about properties
-      if (inputValue.toLowerCase().includes('apartment') || 
-          inputValue.toLowerCase().includes('house') || 
-          inputValue.toLowerCase().includes('property')) {
+      // Show property suggestions if needed
+      if (showProperties) {
         setTimeout(() => {
           setShowPropertySuggestions(true);
         }, 1000);
       }
-    }, 1500);
-  };
-
-  const generateAIResponse = (userInput: string): string => {
-    // Simple response generation logic
-    if (userInput.toLowerCase().includes('hello') || userInput.toLowerCase().includes('hi')) {
-      return "Hello! How can I help with your housing search today?";
-    } else if (userInput.toLowerCase().includes('apartment') || userInput.toLowerCase().includes('house')) {
-      return "I'd be happy to help you find a suitable place! Could you tell me your preferred location, budget, and how many bedrooms you need?";
-    } else if (userInput.toLowerCase().includes('budget') || userInput.toLowerCase().includes('price')) {
-      return "Thanks for sharing your budget. I'm searching for properties within your price range. What amenities are most important to you?";
-    } else if (userInput.toLowerCase().includes('location') || userInput.toLowerCase().includes('area')) {
-      return "That's a great area! I'm finding several options there. Do you need parking or have any specific requirements for the property?";
-    } else if (userInput.toLowerCase().includes('schedule') || userInput.toLowerCase().includes('appointment') || userInput.toLowerCase().includes('viewing')) {
-      return "I can help schedule a viewing. Would you prefer weekday or weekend appointments? I'll coordinate with the property manager.";
-    } else {
-      return "I understand. Based on what you've told me, I'm searching for properties that match your criteria. Give me just a moment to find the best options for you.";
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to get a response. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Error sending message:", error);
+    } finally {
+      setIsTyping(false);
     }
   };
 
@@ -136,16 +88,28 @@ const ChatInterface = () => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const scheduleViewing = (propertyId: string) => {
+  const scheduleViewing = async (propertyId: string) => {
+    setIsTyping(true);
     setShowPropertySuggestions(false);
     
-    const aiResponse: Message = {
-      role: 'assistant',
-      content: `I've scheduled a viewing for you! The property manager will contact you shortly to confirm the details. Would you like me to find more properties similar to this one?`,
-      timestamp: new Date()
-    };
-    
-    setMessages(prev => [...prev, aiResponse]);
+    try {
+      const response = await chatService.scheduleViewing(propertyId);
+      setMessages(prev => [...prev, response]);
+      
+      toast({
+        title: "Viewing Scheduled",
+        description: "We'll contact you with confirmation details shortly.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to schedule viewing. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Error scheduling viewing:", error);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -158,9 +122,9 @@ const ChatInterface = () => {
       
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-        {messages.map((message, index) => (
+        {messages.map((message) => (
           <div 
-            key={index} 
+            key={message.id} 
             className={`mb-4 flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div 
@@ -196,7 +160,7 @@ const ChatInterface = () => {
         )}
         
         {/* Property Suggestions */}
-        {showPropertySuggestions && (
+        {showPropertySuggestions && propertySuggestions.length > 0 && (
           <div className="mb-4">
             <div className="bg-white border border-gray-200 rounded-lg p-3 max-w-[80%]">
               <p className="font-medium mb-2">I found these properties matching your criteria:</p>
