@@ -1,5 +1,4 @@
 
-import { MongoClient, Collection, Db } from 'mongodb';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -13,46 +12,51 @@ export interface User {
 }
 
 class AuthService {
-  private client: MongoClient | null = null;
-  private db: Db | null = null;
-  private userCollection: Collection<User> | null = null;
+  private users: User[] = [];
   private connected: boolean = false;
   private readonly JWT_SECRET = 'flatmate-ai-secret-key'; // In production, use environment variable
 
   constructor() {
-    this.initConnection();
+    // Load users from localStorage if available
+    this.loadUsers();
   }
 
-  private async initConnection() {
+  private loadUsers() {
     try {
-      // Get MongoDB URI from localStorage (temporary solution)
-      const uri = localStorage.getItem('mongodb_uri');
-      
-      if (uri) {
-        this.client = new MongoClient(uri);
-        await this.client.connect();
-        this.db = this.client.db('flatmateai');
-        this.userCollection = this.db.collection<User>('users');
-        this.connected = true;
-        console.log('Connected to MongoDB');
+      const storedUsers = localStorage.getItem('users');
+      if (storedUsers) {
+        this.users = JSON.parse(storedUsers);
+        this.users.forEach(user => {
+          // Convert string date back to Date object
+          user.createdAt = new Date(user.createdAt);
+        });
       }
+      
+      // Check if there's a stored MongoDB URI
+      const uri = localStorage.getItem('mongodb_uri');
+      this.connected = !!uri;
+      
+      console.log('Loaded users from local storage:', this.users.length);
     } catch (error) {
-      console.error('Failed to connect to MongoDB:', error);
-      this.connected = false;
+      console.error('Failed to load users from localStorage:', error);
+    }
+  }
+
+  private saveUsers() {
+    try {
+      localStorage.setItem('users', JSON.stringify(this.users));
+    } catch (error) {
+      console.error('Failed to save users to localStorage:', error);
     }
   }
 
   public async setMongoURI(uri: string): Promise<boolean> {
     try {
-      // Test connection
-      const testClient = new MongoClient(uri);
-      await testClient.connect();
-      await testClient.close();
-      
-      // Store URI and reconnect
+      // Simply store the URI for future reference
+      // In a real app, we would test the connection here
       localStorage.setItem('mongodb_uri', uri);
-      await this.initConnection();
-      return this.connected;
+      this.connected = true;
+      return true;
     } catch (error) {
       console.error('Invalid MongoDB URI:', error);
       return false;
@@ -64,13 +68,13 @@ class AuthService {
   }
 
   public async register(user: Omit<User, '_id' | 'createdAt'>): Promise<{ success: boolean; message: string; token?: string }> {
-    if (!this.connected || !this.userCollection) {
+    if (!this.connected) {
       return { success: false, message: 'Database not connected' };
     }
 
     try {
       // Check if user exists
-      const existingUser = await this.userCollection.findOne({ email: user.email });
+      const existingUser = this.users.find(u => u.email === user.email);
       if (existingUser) {
         return { success: false, message: 'User already exists' };
       }
@@ -81,6 +85,7 @@ class AuthService {
 
       // Create new user
       const newUser: User = {
+        _id: Date.now().toString(), // Simple ID generation
         email: user.email,
         password: hashedPassword,
         firstName: user.firstName,
@@ -88,8 +93,9 @@ class AuthService {
         createdAt: new Date(),
       };
 
-      // Insert user
-      await this.userCollection.insertOne(newUser);
+      // Add user to array and save
+      this.users.push(newUser);
+      this.saveUsers();
 
       // Generate JWT
       const token = jwt.sign(
@@ -106,13 +112,13 @@ class AuthService {
   }
 
   public async login(email: string, password: string): Promise<{ success: boolean; message: string; token?: string; user?: Omit<User, 'password'> }> {
-    if (!this.connected || !this.userCollection) {
+    if (!this.connected) {
       return { success: false, message: 'Database not connected' };
     }
 
     try {
       // Find user
-      const user = await this.userCollection.findOne({ email });
+      const user = this.users.find(u => u.email === email);
       if (!user) {
         return { success: false, message: 'Invalid credentials' };
       }

@@ -3,10 +3,11 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Settings } from "lucide-react";
+import { Settings, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { chatService } from "@/services/chatService";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const APISettings = () => {
   const [openAIKey, setOpenAIKey] = useState('');
@@ -71,6 +72,14 @@ const APISettings = () => {
             Configure your API keys for OpenAI and MongoDB connections.
           </DialogDescription>
         </DialogHeader>
+        
+        <Alert variant="warning" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            This is a browser-based demo with simulated storage. In a production environment, APIs would be called securely from a backend server.
+          </AlertDescription>
+        </Alert>
+        
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <h4 className="font-medium">OpenAI API Key</h4>
@@ -95,7 +104,7 @@ const APISettings = () => {
             <div className="flex space-x-2">
               <Input
                 type="password"
-                placeholder="Enter your MongoDB URI"
+                placeholder="Enter a mock MongoDB URI"
                 value={mongoURI}
                 onChange={(e) => setMongoURI(e.target.value)}
               />
@@ -103,8 +112,11 @@ const APISettings = () => {
             </div>
             <p className="text-xs text-gray-500">
               {isDBConnected 
-                ? "✅ Connected to MongoDB" 
+                ? "✅ Connected to simulated MongoDB" 
                 : "❌ Not connected to MongoDB"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              For demo purposes, any valid URI format will work.
             </p>
           </div>
         </div>

@@ -17,6 +17,11 @@ const App = () => (
       <AuthProvider>
         <Toaster />
         <Sonner />
+        {/* Browser compatibility notice */}
+        <div className="bg-amber-50 border-amber-200 border-b p-2 text-amber-800 text-sm text-center">
+          <strong>Demo Notice:</strong> This is a browser-based demo using simulated backend services. 
+          Some features that would normally require a server are mocked for demonstration purposes.
+        </div>
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
