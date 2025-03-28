@@ -374,8 +374,15 @@ export class MongoStorage implements IStorage {
   }
   
   async getSubscriptionPlan(id: string): Promise<MongoSubscriptionPlan | null> {
-    if (!Types.ObjectId.isValid(id)) return null;
-    return await SubscriptionPlan.findById(id).lean();
+    // Check if id is one of our string IDs
+    if (id === "1" || id === "2" || id === "3") {
+      // For string IDs like "1", "2", "3" use _id field
+      return await SubscriptionPlan.findOne({ _id: id }).lean();
+    } else if (Types.ObjectId.isValid(id)) {
+      // For ObjectId format IDs use findById
+      return await SubscriptionPlan.findById(id).lean();
+    }
+    return null;
   }
   
   // Chat methods
