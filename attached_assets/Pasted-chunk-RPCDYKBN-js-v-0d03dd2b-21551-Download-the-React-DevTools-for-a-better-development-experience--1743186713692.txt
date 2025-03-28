@@ -1,0 +1,51 @@
+chunk-RPCDYKBN.js?v=0d03dd2b:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+chunk-RPCDYKBN.js?v=0d03dd2b:521 Warning: validateDOMNesting(...): <a> cannot appear as a descendant of <a>.
+    at a
+    at a
+    at https://743989e9-9e71-4393-a0c7-f2bab6f84986-00-1epwv2ijuikkq.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=0d03dd2b:337:18
+    at div
+    at div
+    at div
+    at nav
+    at NavigationBar (https://743989e9-9e71-4393-a0c7-f2bab6f84986-00-1epwv2ijuikkq.spock.replit.dev/src/components/navigation-bar.tsx:33:31)
+    at div
+    at HomePage (https://743989e9-9e71-4393-a0c7-f2bab6f84986-00-1epwv2ijuikkq.spock.replit.dev/src/pages/home-page.tsx:28:20)
+    at Route (https://743989e9-9e71-4393-a0c7-f2bab6f84986-00-1epwv2ijuikkq.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=0d03dd2b:323:16)
+    at Switch (https://743989e9-9e71-4393-a0c7-f2bab6f84986-00-1epwv2ijuikkq.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=0d03dd2b:379:17)
+    at Router
+    at AuthProvider (https://743989e9-9e71-4393-a0c7-f2bab6f84986-00-1epwv2ijuikkq.spock.replit.dev/src/hooks/use-auth.tsx:32:32)
+    at QueryClientProvider (https://743989e9-9e71-4393-a0c7-f2bab6f84986-00-1epwv2ijuikkq.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=0d03dd2b:2805:3)
+    at App
+printWarning @ chunk-RPCDYKBN.js?v=0d03dd2b:521
+/api/user:1 
+            
+            
+           Failed to load resource: the server responded with a status of 401 (Unauthorized)
+/api/login:1 
+            
+            
+           Failed to load resource: the server responded with a status of 401 (Unauthorized)
+/api/register:1 
+            
+            
+           Failed to load resource: the server responded with a status of 400 (Bad Request)
+/api/subscribe:1 
+            
+            
+           Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+/api/subscribe:1 
+            
+            
+           Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+/api/subscribe:1 
+            
+            
+           Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+/api/subscribe:1 
+            
+            
+           Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+/api/subscribe:1 
+            
+            
+           Failed to load resource: the server responded with a status of 500 (Internal Server Error)

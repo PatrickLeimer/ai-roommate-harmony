@@ -28,7 +28,7 @@ export default function PricingSection() {
 
   // Subscribe mutation
   const subscribeMutation = useMutation({
-    mutationFn: async (planId: number) => {
+    mutationFn: async (planId: string) => {
       const res = await apiRequest("POST", "/api/subscribe", { planId });
       return await res.json();
     },
@@ -53,7 +53,7 @@ export default function PricingSection() {
     },
   });
 
-  const handleSubscribe = (planId: number) => {
+  const handleSubscribe = (planId: string) => {
     if (!user) {
       toast({
         title: "Authentication required",
@@ -178,7 +178,7 @@ export default function PricingSection() {
                 <span className="text-base font-medium text-gray-500">/mo</span>
               </p>
               <Button 
-                onClick={() => handleSubscribe(1)} 
+                onClick={() => handleSubscribe("1")} 
                 variant="outline" 
                 className="mt-8 w-full"
                 disabled={subscribeMutation.isPending}
@@ -196,7 +196,7 @@ export default function PricingSection() {
             <div className="px-6 pt-6 pb-8">
               <h4 className="text-sm font-medium text-gray-900 tracking-wide">What's included</h4>
               <ul className="mt-6 space-y-4">
-                {pricingPlans[0].features.map((feature, index) => (
+                {pricingPlans[0].features.map((feature: string, index: number) => (
                   <li key={index} className="flex space-x-3">
                     <Check className="flex-shrink-0 h-5 w-5 text-green-500" />
                     <span className="text-sm text-gray-500">{feature}</span>
@@ -228,7 +228,7 @@ export default function PricingSection() {
                 <span className="text-base font-medium text-gray-500">/mo</span>
               </p>
               <Button 
-                onClick={() => handleSubscribe(2)} 
+                onClick={() => handleSubscribe("2")} 
                 className="mt-8 w-full"
                 disabled={subscribeMutation.isPending}
               >
@@ -245,7 +245,7 @@ export default function PricingSection() {
             <div className="px-6 pt-6 pb-8">
               <h4 className="text-sm font-medium text-gray-900 tracking-wide">What's included</h4>
               <ul className="mt-6 space-y-4">
-                {pricingPlans[1].features.map((feature, index) => (
+                {pricingPlans[1].features.map((feature: string, index: number) => (
                   <li key={index} className="flex space-x-3">
                     <Check className="flex-shrink-0 h-5 w-5 text-green-500" />
                     <span className="text-sm text-gray-500">{feature}</span>
@@ -274,7 +274,7 @@ export default function PricingSection() {
                 <span className="text-base font-medium text-gray-500">/year</span>
               </p>
               <Button 
-                onClick={() => handleSubscribe(3)} 
+                onClick={() => handleSubscribe("3")} 
                 variant="secondary" 
                 className="mt-8 w-full"
                 disabled={subscribeMutation.isPending}
@@ -292,7 +292,7 @@ export default function PricingSection() {
             <div className="px-6 pt-6 pb-8">
               <h4 className="text-sm font-medium text-gray-900 tracking-wide">What's included</h4>
               <ul className="mt-6 space-y-4">
-                {pricingPlans[2].features.map((feature, index) => (
+                {pricingPlans[2].features.map((feature: string, index: number) => (
                   <li key={index} className="flex space-x-3">
                     <Check className="flex-shrink-0 h-5 w-5 text-green-500" />
                     <span className="text-sm text-gray-500">{feature}</span>
