@@ -2,6 +2,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import APISettings from '@/components/APISettings';
+import { Settings } from 'lucide-react';
 
 interface ChatHeaderProps {
   isAuthenticated: boolean;

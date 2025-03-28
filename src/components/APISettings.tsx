@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,23 @@ const APISettings = () => {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const { setMongoURI: connectMongo, isDBConnected } = useAuth();
+  
+  // Load existing values from localStorage for display
+  useEffect(() => {
+    const storedOpenAIKey = localStorage.getItem('openai_api_key');
+    const storedMongoURI = localStorage.getItem('mongodb_uri');
+    
+    if (storedOpenAIKey) {
+      setOpenAIKey('••••••••••••••••••••••••••');
+    }
+    
+    if (storedMongoURI) {
+      setMongoURI('••••••••••••••••••••••••••');
+    }
+  }, [open]);
 
   const handleSaveOpenAI = () => {
-    if (!openAIKey.trim()) {
+    if (!openAIKey.trim() || openAIKey === '••••••••••••••••••••••••••') {
       toast({
         title: "Error",
         description: "Please enter a valid OpenAI API key",
@@ -31,7 +46,7 @@ const APISettings = () => {
         title: "Success",
         description: "OpenAI API key saved successfully",
       });
-      setOpenAIKey('');
+      setOpenAIKey('••••••••••••••••••••••••••');
     } else {
       toast({
         title: "Error",
@@ -41,8 +56,17 @@ const APISettings = () => {
     }
   };
 
+  const clearOpenAIKey = () => {
+    setOpenAIKey('');
+    localStorage.removeItem('openai_api_key');
+    toast({
+      title: "Cleared",
+      description: "OpenAI API key has been removed",
+    });
+  };
+
   const handleSaveMongoDB = async () => {
-    if (!mongoURI.trim()) {
+    if (!mongoURI.trim() || mongoURI === '••••••••••••••••••••••••••') {
       toast({
         title: "Error",
         description: "Please enter a valid MongoDB URI",
@@ -53,8 +77,17 @@ const APISettings = () => {
 
     const success = await connectMongo(mongoURI);
     if (success) {
-      setMongoURI('');
+      setMongoURI('••••••••••••••••••••••••••');
     }
+  };
+
+  const clearMongoURI = () => {
+    setMongoURI('');
+    localStorage.removeItem('mongodb_uri');
+    toast({
+      title: "Cleared",
+      description: "MongoDB URI has been removed",
+    });
   };
 
   return (
@@ -72,7 +105,7 @@ const APISettings = () => {
           </DialogDescription>
         </DialogHeader>
         
-        <Alert variant="destructive" className="mb-4">
+        <Alert className="mb-4">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             This is a browser-based demo with simulated storage. In a production environment, APIs would be called securely from a backend server.
@@ -91,11 +124,18 @@ const APISettings = () => {
               />
               <Button onClick={handleSaveOpenAI}>Save</Button>
             </div>
-            <p className="text-xs text-gray-500">
-              {chatService.hasApiKey() 
-                ? "✅ OpenAI API key is configured" 
-                : "❌ OpenAI API key is not configured"}
-            </p>
+            <div className="flex justify-between items-center">
+              <p className="text-xs text-gray-500">
+                {chatService.hasApiKey() 
+                  ? "✅ OpenAI API key is configured" 
+                  : "❌ OpenAI API key is not configured"}
+              </p>
+              {chatService.hasApiKey() && (
+                <Button variant="ghost" size="sm" onClick={clearOpenAIKey} className="text-xs">
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
           
           <div className="space-y-2">
@@ -109,11 +149,18 @@ const APISettings = () => {
               />
               <Button onClick={handleSaveMongoDB}>Connect</Button>
             </div>
-            <p className="text-xs text-gray-500">
-              {isDBConnected 
-                ? "✅ Connected to simulated MongoDB" 
-                : "❌ Not connected to MongoDB"}
-            </p>
+            <div className="flex justify-between items-center">
+              <p className="text-xs text-gray-500">
+                {isDBConnected 
+                  ? "✅ Connected to simulated MongoDB" 
+                  : "❌ Not connected to MongoDB"}
+              </p>
+              {isDBConnected && (
+                <Button variant="ghost" size="sm" onClick={clearMongoURI} className="text-xs">
+                  Clear
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               For demo purposes, any valid URI format will work.
             </p>
