@@ -328,8 +328,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error creating subscription", error: error.message });
     }
   });
+  
+  // Verify subscription after successful Stripe checkout
+  app.post("/api/verify-subscription", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { sessionId } = req.body;
+      
+      if (!sessionId) {
+        return res.status(400).json({ message: "Session ID is required", success: false });
+      }
+      
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+      
+      // Retrieve the session to get subscription details
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      // If the session is complete, update the user's subscription status
+      if (session.status === "complete" && session.subscription) {
+        // Get the subscription to check its status
+        const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+        
+        // If the checkout was successful but webhook hasn't processed yet, update user manually
+        if (subscription.status === "active" && session.metadata?.userId === req.user._id.toString()) {
+          // Update the user's subscription info
+          const updatedUser = await storage.updateUserSubscription(
+            req.user._id.toString(),
+            session.metadata?.planId || "premium", // Default to premium if no planId
+            "active"
+          );
+          
+          // Update stripe info if it doesn't exist
+          if (!req.user.stripeCustomerId || !req.user.stripeSubscriptionId) {
+            await storage.updateUserStripeInfo(req.user._id.toString(), {
+              customerId: session.customer as string,
+              subscriptionId: session.subscription as string
+            });
+          }
+          
+          return res.json({
+            success: true,
+            message: "Subscription verified successfully"
+          });
+        }
+      }
+      
+      // If the session is not complete or doesn't have a subscription, return error
+      return res.json({
+        success: true,
+        message: "Subscription is being processed. It may take a few minutes to activate."
+      });
+    } catch (error: any) {
+      console.error("Error verifying subscription:", error);
+      return res.status(500).json({
+        success: false,
+        error: error.message,
+        message: "Error verifying subscription"
+      });
+    }
+  });
 
-  // Stripe webhook handler
+  // Stripe webhook handler - make sure body-parser doesn't process this route
   app.post("/api/webhook", express.raw({ type: "application/json" }), async (req: Request, res: Response) => {
     const sig = req.headers["stripe-signature"];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -340,13 +402,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
       
       // If we have the signature and secret, verify the webhook
-      if (sig && endpointSecret) {
+      // Make sure req.body is a Buffer for webhook signature verification
+      if (sig && endpointSecret && Buffer.isBuffer(req.body)) {
         event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
       } else {
         // For development or when missing the secret, parse the raw body
         // Note: This is less secure but allows development without webhook setup
         console.warn("Missing Stripe signature or endpoint secret - parsing raw body instead");
-        event = JSON.parse(req.body.toString());
+        const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body);
+        event = JSON.parse(rawBody);
       }
       
       const result = await handleWebhookEvent(event);

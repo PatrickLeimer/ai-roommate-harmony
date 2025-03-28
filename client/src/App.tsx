@@ -7,12 +7,16 @@ import HomePage from "@/pages/home-page";
 import AuthPage from "@/pages/auth-page";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "./lib/protected-route";
+import SubscriptionSuccessPage from "@/pages/subscription-success";
+import SubscriptionCancelPage from "@/pages/subscription-cancel";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={HomePage} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/subscription/success" component={SubscriptionSuccessPage} />
+      <Route path="/subscription/cancel" component={SubscriptionCancelPage} />
       <Route component={NotFound} />
     </Switch>
   );
