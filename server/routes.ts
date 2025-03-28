@@ -9,8 +9,15 @@ import Stripe from "stripe";
 import { z } from "zod";
 import { Types } from 'mongoose';
 
-// MongoDB ObjectId validation helper
-const isValidObjectId = (id: string): boolean => Types.ObjectId.isValid(id);
+// ID validation helper that works with both MongoDB ObjectId and our mock storage
+const isValidObjectId = (id: string): boolean => {
+  // For mock storage, we're using numeric strings as IDs
+  if (/^\d+$/.test(id)) {
+    return true;
+  }
+  // For MongoDB, we use ObjectId validation
+  return Types.ObjectId.isValid(id);
+};
 
 // Add this to Express.User to fix type issues
 declare global {

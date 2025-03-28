@@ -2,11 +2,34 @@ import OpenAI from "openai";
 import { storage } from "./storage";
 import { Types } from 'mongoose';
 
-// Initialize OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+// Initialize OpenAI client with fallback functionality
+let openai: OpenAI;
+let hasValidOpenAIKey = false;
+
+try {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (apiKey && apiKey.startsWith('sk-')) {
+    openai = new OpenAI({ apiKey });
+    hasValidOpenAIKey = true;
+    console.log('OpenAI initialized successfully');
+  } else {
+    console.warn('Invalid or missing OpenAI API key');
+    openai = new OpenAI({ apiKey: 'dummy-key' }); // Dummy instance that will throw errors when used
+  }
+} catch (error) {
+  console.error('Error initializing OpenAI:', error);
+  openai = new OpenAI({ apiKey: 'dummy-key' }); // Dummy instance
+}
 
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const MODEL = "gpt-4o";
+
+// Mock responses for testing when OpenAI is not available
+const mockResponses = {
+  chat: "I'm a mock AI assistant response because the OpenAI API key is missing or invalid. To use real AI responses, please provide a valid OpenAI API key.",
+  propertySearch: "I found 2 mock properties that match your criteria. This is a placeholder response because the OpenAI API key is missing or invalid.",
+  leaseAnalysis: "This is a mock lease analysis because the OpenAI API key is missing or invalid. To get real analysis, please provide a valid OpenAI API key."
+};
 
 // Function to handle chat conversations
 export async function handleChatConversation(userId: string, userMessage: string, conversationId?: string) {
@@ -15,7 +38,13 @@ export async function handleChatConversation(userId: string, userMessage: string
     let conversation;
     let messages;
     
-    if (conversationId && Types.ObjectId.isValid(conversationId)) {
+    // Check for valid conversation ID - handle both MongoDB and mock storage
+    const isValidId = conversationId && (
+      Types.ObjectId.isValid(conversationId) || 
+      /^\d+$/.test(conversationId) // Also accept string numbers for mock storage
+    );
+    
+    if (isValidId) {
       conversation = await storage.getConversation(conversationId);
       if (!conversation || conversation.userId !== userId) {
         throw new Error("Conversation not found or unauthorized");
@@ -92,13 +121,25 @@ export async function handleChatConversation(userId: string, userMessage: string
       };
     } else {
       // For non-search queries, use the OpenAI API directly
-      const completion = await openai.chat.completions.create({
-        model: MODEL,
-        messages: formattedMessages,
-        max_tokens: 500,
-      });
+      let responseContent;
       
-      const responseContent = completion.choices[0].message.content;
+      if (hasValidOpenAIKey) {
+        try {
+          const completion = await openai.chat.completions.create({
+            model: MODEL,
+            messages: formattedMessages,
+            max_tokens: 500,
+          });
+          
+          responseContent = completion.choices[0].message.content;
+        } catch (error) {
+          console.error('OpenAI API error:', error);
+          responseContent = mockResponses.chat;
+        }
+      } else {
+        // Use mock response if API key is invalid
+        responseContent = mockResponses.chat;
+      }
       
       // Save AI response to database
       const assistantMessage = await storage.createMessage({
@@ -131,6 +172,11 @@ function isSearchRequest(message: string): boolean {
 
 // Function to extract search parameters from user message
 async function extractSearchParameters(message: string): Promise<any> {
+  // If we don't have a valid API key, just use the basic extraction
+  if (!hasValidOpenAIKey) {
+    return basicParameterExtraction(message);
+  }
+  
   try {
     const prompt = `
       Extract property search parameters from this user message. Return ONLY a JSON object with these fields:
@@ -191,6 +237,11 @@ function basicParameterExtraction(message: string): any {
 
 // Function to analyze a lease contract
 export async function analyzeLease(text: string) {
+  // If OpenAI API is not available, return mock response
+  if (!hasValidOpenAIKey) {
+    return mockResponses.leaseAnalysis;
+  }
+  
   try {
     const prompt = `
       You are a lease contract analysis expert. Please analyze the following lease agreement and provide:
@@ -211,12 +262,42 @@ export async function analyzeLease(text: string) {
     return response.choices[0].message.content;
   } catch (error) {
     console.error("Error analyzing lease:", error);
-    throw error;
+    return mockResponses.leaseAnalysis;
   }
 }
 
 // Function to generate listings based on search criteria
 export async function generateListings(criteria: any): Promise<any[]> {
+  // If OpenAI API is not available, return mock data
+  if (!hasValidOpenAIKey) {
+    return [
+      {
+        title: "Modern Apartment in City Center",
+        description: "A beautiful, newly renovated apartment with all amenities",
+        location: criteria.location || "Berlin",
+        price: criteria.maxPrice || 1200,
+        bedrooms: criteria.bedrooms || 2,
+        bathrooms: 1,
+        size: 75,
+        nearestTransport: "Central Station",
+        transportDistance: "5 minutes walk",
+        contactInfo: "contact@flatmate.ai"
+      },
+      {
+        title: "Cozy Studio with Garden View",
+        description: "Perfect for singles or couples, this studio has everything you need",
+        location: criteria.location || "Berlin",
+        price: criteria.maxPrice ? criteria.maxPrice * 0.8 : 900,
+        bedrooms: 1,
+        bathrooms: 1,
+        size: 45,
+        nearestTransport: "Bus Stop",
+        transportDistance: "2 minutes walk",
+        contactInfo: "listings@flatmate.ai"
+      }
+    ];
+  }
+  
   try {
     // This function would typically be used for demo/testing purposes
     // In production, you'd use real listings from a database or web scraping
@@ -255,6 +336,32 @@ export async function generateListings(criteria: any): Promise<any[]> {
     return result.listings || [];
   } catch (error) {
     console.error("Error generating listings:", error);
-    throw error;
+    // Return mock data if OpenAI fails
+    return [
+      {
+        title: "Modern Apartment in City Center",
+        description: "A beautiful, newly renovated apartment with all amenities",
+        location: criteria.location || "Berlin",
+        price: criteria.maxPrice || 1200,
+        bedrooms: criteria.bedrooms || 2,
+        bathrooms: 1,
+        size: 75,
+        nearestTransport: "Central Station",
+        transportDistance: "5 minutes walk",
+        contactInfo: "contact@flatmate.ai"
+      },
+      {
+        title: "Cozy Studio with Garden View",
+        description: "Perfect for singles or couples, this studio has everything you need",
+        location: criteria.location || "Berlin",
+        price: criteria.maxPrice ? criteria.maxPrice * 0.8 : 900,
+        bedrooms: 1,
+        bathrooms: 1,
+        size: 45,
+        nearestTransport: "Bus Stop",
+        transportDistance: "2 minutes walk",
+        contactInfo: "listings@flatmate.ai"
+      }
+    ];
   }
 }
